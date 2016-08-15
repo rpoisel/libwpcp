@@ -1,8 +1,12 @@
 #include "test.h"
 #include "../src/wpcp_cbor.h"
+#include <float.h>
 #include <math.h>
 
-//static struct wpcp_cbor_read_buffer_t g_read_buffer;
+#define wpcp_assert_double_eq(X, Y) \
+  ck_assert(fabs((X) - (Y)) < DBL_EPSILON)
+#define wpcp_assert_float_eq(X, Y) \
+  ck_assert(fabsf((X) - (Y)) < FLT_EPSILON)
 
 static void tc_setup(void)
 {
@@ -1069,7 +1073,7 @@ START_TEST(value_half_7bff)
 
   struct wpcp_value_t* value = wpcp_cbor_read_buffer_read_wpcp_value(&buffer);
   ck_assert_int_eq(value->type, WPCP_VALUE_TYPE_FLOAT);
-  ck_assert(value->value.flt == 65504.0f);
+  wpcp_assert_float_eq(value->value.flt, 65504.0f);
   wpcp_value_free(value);
 }
 END_TEST
@@ -1083,7 +1087,7 @@ START_TEST(value_half_0001)
 
   struct wpcp_value_t* value = wpcp_cbor_read_buffer_read_wpcp_value(&buffer);
   ck_assert_int_eq(value->type, WPCP_VALUE_TYPE_FLOAT);
-  ck_assert(value->value.flt == 5.960464477539063e-8f);
+  wpcp_assert_float_eq(value->value.flt, 5.960464477539063e-8f);
   wpcp_value_free(value);
 }
 END_TEST
@@ -1097,7 +1101,7 @@ START_TEST(value_half_0400)
 
   struct wpcp_value_t* value = wpcp_cbor_read_buffer_read_wpcp_value(&buffer);
   ck_assert_int_eq(value->type, WPCP_VALUE_TYPE_FLOAT);
-  ck_assert(value->value.flt == 0.00006103515625f);
+  wpcp_assert_float_eq(value->value.flt, 0.00006103515625f);
   wpcp_value_free(value);
 }
 END_TEST
@@ -1169,7 +1173,7 @@ START_TEST(value_float)
 
   struct wpcp_value_t* value = wpcp_cbor_read_buffer_read_wpcp_value(&buffer);
   ck_assert_int_eq(value->type, WPCP_VALUE_TYPE_FLOAT);
-  ck_assert(value->value.flt == 100000.0f);
+  wpcp_assert_float_eq(value->value.flt, 100000.0f);
   wpcp_value_free(value);
 }
 END_TEST
@@ -1183,7 +1187,7 @@ START_TEST(value_double)
 
   struct wpcp_value_t* value = wpcp_cbor_read_buffer_read_wpcp_value(&buffer);
   ck_assert_int_eq(value->type, WPCP_VALUE_TYPE_DOUBLE);
-  ck_assert(value->value.dbl == 1.1);
+  wpcp_assert_double_eq(value->value.dbl, 1.1);
   wpcp_value_free(value);
 }
 END_TEST
