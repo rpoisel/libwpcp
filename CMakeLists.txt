@@ -93,9 +93,17 @@ if (WPCP_BUILD_CHECK)
   set(CHECK_LIBRARIES check compat)
 else ()
   find_package(Check)
+  find_package(Subunit)
   if (NOT CHECK_FOUND)
     message(FATAL_ERROR "Call cmake with '-DWPCP_BUILD_CHECK=ON' to build Check as ExternalProject.")
   endif ()
+  if (SUBUNIT_FOUND)
+    list(APPEND CHECK_LIBRARIES ${SUBUNIT_LIBRARIES})
+  endif ()
+endif ()
+
+if (UNIX AND NOT APPLE)
+  list(APPEND CHECK_LIBRARIES m pthread rt)
 endif ()
 
 
