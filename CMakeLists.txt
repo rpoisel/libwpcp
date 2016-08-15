@@ -76,8 +76,8 @@ endif ()
 if (WPCP_BUILD_CHECK)
   ExternalProject_Add(
     check-code
-    URL http://sourceforge.net/projects/check/files/check/0.10.0/check-0.10.0.tar.gz/download
-    URL_HASH SHA256=f5f50766aa6f8fe5a2df752666ca01a950add45079aa06416b83765b1cf71052
+    GIT_REPOSITORY git://github.com/libcheck/check
+    GIT_TAG "0.10.0"
     CMAKE_ARGS "-DCMAKE_BUILD_TYPE:PATH=${CMAKE_BUILD_TYPE}" "-DCMAKE_PREFIX_PATH:PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>"
     BUILD_IN_SOURCE 1
   )
