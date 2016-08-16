@@ -1,6 +1,10 @@
 #include "wpcp_lws.h"
+
+#include "wpcp_lws_main.h"
+#include "wpcp_util.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef _MSC_VER
 #pragma warning(push, 2)
@@ -9,10 +13,6 @@
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-#ifndef _WIN32_WCE
-#include <signal.h>
-#endif
-#include <string.h>
 
 #ifdef _WIN32
 #ifndef snprintf
@@ -24,157 +24,177 @@
 
 WPCP_BEGIN_EXTERN_C
 
-static struct wpcp_lws_t g_lws;
-static int arg_debug_level = 7;
-static int arg_http_port = CONTEXT_PORT_NO_LISTEN;
-static const char* arg_http_rootdir = ".";
-static const char* arg_rwpcp_auth = NULL;
-static const char* arg_rwpcp_host = NULL;
-static int arg_rwpcp_port = 80;
-static int arg_rwpcp_ssl = 0;
-static const char* arg_rwpcp_path = "/";
-static const char* arg_rwpcp_origin = NULL;
-static int arg_rwpcp_interval = 10;
-
-
 struct helper_t {
   struct lws* wsi;
+  struct wpcp_lws_t* wpcp_lws;
   struct wpcp_session_t* session;
 };
 
-void has_out_message_cb(void* user)
+struct wpcp_lws_t {
+  struct wpcp_t* wpcp;
+  struct lws_context* context;
+  struct lws_http_mount http_mount;
+  struct lws_http_mount https_mount;
+  struct lws_client_connect_info client_connect_info;
+  struct lws* client;
+  time_t next_client_connect;
+  time_t client_reconnect_interval;
+  const char* client_authorization_header;
+
+  void* user;
+  union wpcp_read_data_callback_t read_data;
+  union wpcp_write_data_callback_t write_data;
+  union wpcp_handle_alarm_callback_t handle_alarm;
+  union wpcp_read_history_data_callback_t read_history_data;
+  union wpcp_read_history_alarm_callback_t read_history_alarm;
+  union wpcp_browse_callback_t browse;
+  union wpcp_subscribe_data_callback_t subscribe_data;
+  union wpcp_subscribe_alarm_callback_t subscribe_alarm;
+  union wpcp_unsubscribe_callback_t unsubscribe;
+  union wpcp_republish_callback_t republish;
+
+#ifdef _WIN32
+  CRITICAL_SECTION mutex;
+#else
+  pthread_mutex_t mutex;
+#endif
+};
+
+WPCP_STATIC_INLINE struct wpcp_lws_t* wpcp_lws_wsi_context_user(struct lws *wsi)
+{
+  return lws_context_user(lws_get_context(wsi));
+}
+
+WPCP_STATIC_INLINE int ssl_option(enum wpcp_lws_options_secure_t value)
+{
+  if (value == WPCP_LWS_OPTIONS_SECURE_OFF)
+    return 0;
+  if (value == WPCP_LWS_OPTIONS_SECURE_ALLOW_SELF_SIGNED)
+    return 2;
+  return 1;
+}
+
+static void has_out_message_cb(void* user)
 {
   struct helper_t* helper = user;
   lws_callback_on_writable(helper->wsi);
 }
 
-static char uri_buffer[256];
-char* uri_buffer_insert_location;
-
-struct lws* g_client;
-bool force_exit;
-
-
-const char default_mimetype[] = "application/octet-stream";
-const char* find_mimetype(const char* extension)
+static void read_data_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
 {
-  if (!strcmp(extension, "html") || !strcmp(extension, "htm"))
-    return "text/html";
-  if (!strcmp(extension, "js"))
-    return "text/javascript";
-  if (!strcmp(extension, "ico"))
-    return "image/x-icon";
-  return default_mimetype;
+  struct helper_t* helper = user;
+  helper->wpcp_lws->read_data.ex_cb(helper->wpcp_lws->user, result, id, context, remaining, additional, additional_count);
 }
 
-int callback_for_libwebsocket(struct lws* wsi, enum lws_callback_reasons reason, void* user, void* in, size_t len)
+static void write_data_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, const struct wpcp_value_t* value, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->write_data.ex_cb(helper->wpcp_lws->user, result, id, value, context, remaining, additional, additional_count);
+}
+
+static void handle_alarm_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* token, const struct wpcp_value_t* acknowledge, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->handle_alarm.ex_cb(helper->wpcp_lws->user, result, token, acknowledge, context, remaining, additional, additional_count);
+}
+
+static void read_history_data_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, const struct wpcp_value_t* starttime, const struct wpcp_value_t* endtime, const struct wpcp_value_t* maxresults, const struct wpcp_value_t* aggregation, const struct wpcp_value_t* interval, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->read_history_data.ex_cb(helper->wpcp_lws->user, result, id, starttime, endtime, maxresults, aggregation, interval, context, remaining, additional, additional_count);
+}
+
+static void read_history_alarm_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, const struct wpcp_value_t* starttime, const struct wpcp_value_t* endtime, const struct wpcp_value_t* maxresults, const struct wpcp_value_t* filter, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->read_history_alarm.ex_cb(helper->wpcp_lws->user, result, id, starttime, endtime, maxresults, filter, context, remaining, additional, additional_count);
+}
+
+static void browse_ex_cb(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->browse.ex_cb(helper->wpcp_lws->user, result, id, context, remaining, additional, additional_count);
+}
+
+static void subscribe_data_ex_cb(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->subscribe_data.ex_cb(helper->wpcp_lws->user, result, subscription, id, context, remaining, additional, additional_count);
+}
+
+static void subscribe_alarm_ex_cb(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id, const struct wpcp_value_t* filter, void** context, uint32_t remaining, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->subscribe_alarm.ex_cb(helper->wpcp_lws->user, result, subscription, id, filter, context, remaining, additional, additional_count);
+}
+
+static void unsubscribe_ex_cb(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, void** context, uint32_t remaining)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->unsubscribe.ex_cb(helper->wpcp_lws->user, result, subscription, context, remaining);
+}
+
+static void republish_ex_cb(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription, void** context, uint32_t remaining)
+{
+  struct helper_t* helper = user;
+  helper->wpcp_lws->republish.ex_cb(helper->wpcp_lws->user, publish_handle, subscription, context, remaining);
+}
+
+static int rwpcp_wpcp_calback(struct lws* wsi, enum lws_callback_reasons reason, void* user, void* in, size_t len)
 {
   struct helper_t* helper = user;
 
   switch (reason) {
-  case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
-    if (arg_rwpcp_auth) {
-      char** p = in;
-      size_t cnt = snprintf(*p, len, "Authorization: %s\r\n", arg_rwpcp_auth);
-
-      if (cnt >= len) {
-        lwsl_err("ERROR adding Authorization header\n");
-        return -1;
-      }
-
-      *p += cnt;
-    }
-    break;
-
   case LWS_CALLBACK_CLIENT_ESTABLISHED:
   case LWS_CALLBACK_ESTABLISHED:
     helper->wsi = wsi;
-    helper->session = wpcp_session_create(g_lws.wpcp, helper);
+    helper->wpcp_lws = wpcp_lws_wsi_context_user(wsi);
+    helper->session = wpcp_session_create(helper->wpcp_lws->wpcp, helper);
     break;
 
   case LWS_CALLBACK_CLIENT_WRITEABLE:
   case LWS_CALLBACK_SERVER_WRITEABLE:
-    wpcp_lws_lock();
+    wpcp_lws_lock(helper->wpcp_lws);
     if (wpcp_session_has_out_message(helper->session)) {
       int written;
+      size_t out_message_length;
       struct wpcp_out_message_t* out_message = wpcp_session_out_message_create(helper->session);
-      size_t out_message_length = out_message->length;
-      wpcp_lws_unlock();
+      wpcp_lws_unlock(helper->wpcp_lws);
       if (!out_message) {
         lwsl_err("ERROR creating WPCP message\n");
         return -1;
       }
 
+      out_message_length = out_message->length;
       written = lws_write(wsi, out_message->data, out_message_length, LWS_WRITE_BINARY);
       wpcp_session_out_message_delete(out_message);
       if (written < (int)out_message_length) {
-        lwsl_err("ERROR %d writing to di socket\n", out_message->length);
+        lwsl_err("ERROR writing to di socket\n");
         return -1;
       }
 
-      wpcp_lws_lock();
+      wpcp_lws_lock(helper->wpcp_lws);
       if (wpcp_session_has_out_message(helper->session))
         lws_callback_on_writable(wsi);
     }
-    wpcp_lws_unlock();
+    wpcp_lws_unlock(helper->wpcp_lws);
     break;
 
   case LWS_CALLBACK_CLIENT_RECEIVE:
   case LWS_CALLBACK_RECEIVE:
-    wpcp_lws_lock();
+    wpcp_lws_lock(helper->wpcp_lws);
     if (!wpcp_session_handle_in_message(helper->session, in, len)) {
-      wpcp_lws_unlock();
+      wpcp_lws_unlock(helper->wpcp_lws);
       lwsl_err("ERROR handling WPCP message\n");
       return -1;
     }
-    wpcp_lws_unlock();
+    wpcp_lws_unlock(helper->wpcp_lws);
     break;
 
-  case LWS_CALLBACK_WSI_DESTROY:
-    if (helper) {
-      wpcp_lws_lock();
-      wpcp_session_delete(helper->session);
-      wpcp_lws_unlock();
-    }
-    if (wsi == g_client)
-      g_client = NULL;
-    break;
-
-  case LWS_CALLBACK_HTTP:
-    {
-      const char* p;
-      const char* path = in;
-      size_t max_path = (sizeof(uri_buffer) / sizeof(uri_buffer[0]) - (uri_buffer_insert_location - uri_buffer));
-      const char* content_type = default_mimetype;
-
-      lwsl_debug("serving HTTP URI %s\n", path);
-      if (path[0] != '/') {
-        lws_return_http_status(wsi, 403, "");
-        break;
-      }
-
-      if (strstr(path, "/../")) {
-        lws_return_http_status(wsi, 403, "");
-        break;
-      }
-
-      if (len >= max_path) {
-        lws_return_http_status(wsi, 403, "");
-        break;
-      }
-
-      memcpy(uri_buffer_insert_location, in, len);
-      uri_buffer_insert_location[len] = '\0';
-      p = uri_buffer_insert_location + len - 1;
-      while (*p != '.' && *p != '/')
-        p -= 1;
-
-      if (*p == '.')
-        content_type = find_mimetype(p + 1);
-
-      lws_serve_http_file(wsi, uri_buffer, content_type, NULL, 0);
-      break;
-    }
+  case LWS_CALLBACK_CLOSED:
+    wpcp_lws_lock(helper->wpcp_lws);
+    wpcp_session_delete(helper->session);
+    wpcp_lws_unlock(helper->wpcp_lws);
     break;
 
   case LWS_CALLBACK_GET_THREAD_ID:
@@ -193,253 +213,243 @@ int callback_for_libwebsocket(struct lws* wsi, enum lws_callback_reasons reason,
   return 0;
 }
 
-static const char* handle_argument(const char* key, const char* value, const char* original_error)
+static int default_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
-  if (!strcmp(key, "http.port")) {
-    if (!value)
-      return "no value sepcified";
-    arg_http_port = atoi(value);
-    if (!arg_http_port)
-      return "invalid value for HTTP port";
-    return NULL;
-  }
+  struct wpcp_lws_t* wpcp_lws = wpcp_lws_wsi_context_user(wsi);
+  (void) user;
 
-  if (!strcmp(key, "http.rootdir")) {
-    if (!value)
-      return "no value sepcified";
-    arg_http_rootdir = value;
-    return NULL;
-  }
+  switch(reason) {
+  case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+    if (wpcp_lws->client_authorization_header) {
+      char** p = in;
+      size_t cnt = snprintf(*p, len, "Authorization: %s\r\n", wpcp_lws->client_authorization_header);
 
-  if (!strcmp(key, "debug.level")) {
-    if (!value)
-      return "no value sepcified";
-    arg_debug_level = atoi(value);
-    if (arg_debug_level > 7)
-      return "value must be between 0 and 7";
-    return NULL;
-  }
-
-  if (!strcmp(key, "rwpcp.auth")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_auth = value;
-    return NULL;
-  }
-  if (!strcmp(key, "rwpcp.host")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_host = value;
-    return NULL;
-  }
-  if (!strcmp(key, "rwpcp.port")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_port = atoi(value);
-    if (!arg_rwpcp_port)
-      return "invalid value for HTTP port";
-    return NULL;
-  }
-
-  if (!strcmp(key, "rwpcp.ssl")) {
-    if (value)
-      return "value sepcified";
-    arg_rwpcp_ssl = 1;
-    return NULL;
-  }
-
-  if (!strcmp(key, "rwpcp.path")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_path = value;
-    return NULL;
-  }
-
-  if (!strcmp(key, "rwpcp.origin")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_origin = value;
-    return NULL;
-  }
-
-  if (!strcmp(key, "rwpcp.interval")) {
-    if (!value)
-      return "no value sepcified";
-    arg_rwpcp_interval = atoi(value);
-    return NULL;
-  }
-
-  return original_error;
-}
-
-
-void sighandler(int sig)
-{
-  (void) sig;
-  force_exit = true;
-}
-
-static struct lws_protocols protocols[] = {
-  {
-    "wpcp",
-    callback_for_libwebsocket,
-    sizeof(struct helper_t),
-    0, 0, NULL
-  },
-  {
-    "rwpcp",
-    callback_for_libwebsocket,
-    sizeof(struct helper_t),
-    0, 0, NULL
-  },
-  { NULL, NULL, 0, 0, 0, NULL } /* terminator */
-};
-
-#ifdef _WIN32
-static CRITICAL_SECTION g_mutex;
-#else
-static pthread_mutex_t g_mutex;
-#endif
-
-int wpcp_lws_main(int argc, char* argv[], wpcp_lws_init_cleanup_function_t init, wpcp_lws_init_cleanup_function_t cleanup)
-{
-  struct lws_context_creation_info info;
-  struct lws_context* context;
-  time_t next_client_connect = 0;
-  char** args = argv + 1;
-  int remaining = argc - 1;
-  size_t root_dir_length;
-  int n = 0;
-
-  g_lws.wpcp = wpcp_create();
-  g_lws.argc = argc;
-  g_lws.argv = argv;
-
-#ifdef _WIN32
-  InitializeCriticalSection(&g_mutex);
-#else
-  pthread_mutex_init(&g_mutex, NULL);
-#endif
-
-#ifndef _WIN32_WCE
-  signal(SIGINT, sighandler);
-#endif
-
-  init(&g_lws);
-
-  while (remaining) {
-    const char* argument_error = "unknown error";
-    const char* key = *args;
-    const char* value = NULL;
-
-    if (key[0] != '-' || key[1] != '-' || key[2] == '\0') {
-      lwsl_err("invalid argument key '%s'\n", key);
-      return -1;
-    }
-
-    key += 2;
-    --remaining;
-    ++args;
-
-    if (remaining) {
-      value = *args;
-      if (value[0] != '-' || value[1] != '-' || value[2] == '\0') {
-        --remaining;
-        ++args;
-      } else
-        value = NULL;
-    }
-
-    if (g_lws.handle_argument)
-      argument_error = g_lws.handle_argument(key, value);
-
-    if (argument_error)
-      argument_error = handle_argument(key, value, argument_error);
-
-    if (argument_error) {
-      lwsl_err("invalid argument '%s'%s%s%s (%s)\n", key, value ? " = '" : "", value ? value : "", value ? "'" : "", argument_error);
-      return -1;
-    }
-  }
-
-  if (arg_http_port == CONTEXT_PORT_NO_LISTEN && !arg_rwpcp_host) {
-    lwsl_err("no port and/or remote host given\n");
-    return -1;
-  }
-
-  lws_set_log_level(arg_debug_level, NULL);
-
-  memset(&info, 0, sizeof info);
-  info.port = arg_http_port;
-  info.gid = -1;
-  info.options = 0;
-  info.ssl_cert_filepath = NULL;
-  info.ssl_private_key_filepath = NULL;
-  info.uid = -1;
-  info.protocols = protocols;
-
-  root_dir_length = strlen(arg_http_rootdir);
-  memcpy(uri_buffer, arg_http_rootdir, root_dir_length);
-  uri_buffer_insert_location = uri_buffer + 1;
-
-  g_lws.wpcp->out_message_pre_padding = LWS_SEND_BUFFER_PRE_PADDING;
-  g_lws.wpcp->out_message_post_padding = LWS_SEND_BUFFER_POST_PADDING;
-  g_lws.wpcp->has_out_message.cb = has_out_message_cb;
-
-  context = lws_create_context(&info);
-  if (context == NULL) {
-    lwsl_err("creating context failed\n");
-    return -1;
-  }
-
-  if (g_lws.start)
-    g_lws.start();
-
-  while (n >= 0 && !force_exit) {
-    if (!g_client && arg_rwpcp_host) {
-      time_t current_time = time(NULL);
-      if (next_client_connect < current_time) {
-        lwsl_debug("Connecting client to %s\n", arg_rwpcp_host);
-        g_client = lws_client_connect(context, arg_rwpcp_host, arg_rwpcp_port, arg_rwpcp_ssl, arg_rwpcp_path, arg_rwpcp_host, arg_rwpcp_origin, protocols[1].name, -1);
-        next_client_connect = current_time + arg_rwpcp_interval;
+      if (cnt >= len) {
+        lwsl_err("ERROR adding Authorization header\n");
+        return -1;
       }
+
+      *p += cnt;
     }
-    n = lws_service(context, 500);
+    break;
+
+  case LWS_CALLBACK_HTTP:
+    return lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, NULL);
+
+  case LWS_CALLBACK_WSI_DESTROY:
+    if (wsi == wpcp_lws->client)
+      wpcp_lws->client = NULL;
+    break;
+
+  default:
+    break;
   }
-
-  if (g_lws.stop)
-    g_lws.stop();
-
-  lws_context_destroy(context);
-  cleanup(&g_lws);
-
-#ifdef _WIN32
-  DeleteCriticalSection(&g_mutex);
-#else
-  pthread_mutex_destroy(&g_mutex);
-#endif
-
-  wpcp_delete(g_lws.wpcp);
 
   return 0;
 }
 
-void wpcp_lws_lock(void)
+static struct lws_protocols protocols[] = {
+  {
+    "", default_lws_callback,
+    0, 0, 0, NULL
+  }, {
+    "wpcp", rwpcp_wpcp_calback,
+    sizeof(struct helper_t),
+    0, 0, NULL
+  }, {
+    "rwpcp", rwpcp_wpcp_calback,
+    sizeof(struct helper_t),
+    0, 0, NULL
+  }, {
+    NULL, NULL, 0, 0, 0, NULL
+  }
+};
+
+void wpcp_lws_set_log_level(int level, void (*log_emit_function)(int level, const char *line))
+{
+  lws_set_log_level(level, log_emit_function);
+}
+
+struct wpcp_t* wpcp_lws_wpcp_create(void)
+{
+  struct wpcp_t* ret = wpcp_create();
+  if (!ret)
+    return NULL;
+  ret->out_message_pre_padding = LWS_SEND_BUFFER_PRE_PADDING;
+  ret->out_message_post_padding = LWS_SEND_BUFFER_POST_PADDING;
+  ret->has_out_message.cb = has_out_message_cb;
+  return ret;
+}
+
+struct wpcp_lws_t* wpcp_lws_create(const struct wpcp_lws_options_t* options)
+{
+  struct wpcp_lws_t* ret;
+  struct lws_context_creation_info info;
+
+  ret = wpcp_calloc(1, sizeof(*ret));
+  if (!ret)
+    return NULL;
+
+  ret->wpcp = wpcp_create();
+  if (!ret->wpcp) {
+    wpcp_free(ret->wpcp);
+    return NULL;
+  }
+
+#ifdef _WIN32
+  InitializeCriticalSection(&ret->mutex);
+#else
+  pthread_mutex_init(&ret->mutex, NULL);
+#endif
+
+  memset(&info, 0, sizeof(info));
+  info.user = ret;
+  info.gid = -1;
+  info.uid = -1;
+  info.protocols = protocols;
+  info.server_string = options->server_string ? options->server_string : "libwpcp";
+  info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT | LWS_SERVER_OPTION_EXPLICIT_VHOSTS;
+
+  ret->context = lws_create_context(&info);
+  ret->client_reconnect_interval = options->rwpcp_reconnect_interval ? options->rwpcp_reconnect_interval : 10;
+  ret->client_authorization_header = options->rwpcp_authorization;
+  ret->user = options->user;
+
+  ret->wpcp->out_message_pre_padding = LWS_SEND_BUFFER_PRE_PADDING;
+  ret->wpcp->out_message_post_padding = LWS_SEND_BUFFER_POST_PADDING;
+  ret->wpcp->has_out_message.cb = has_out_message_cb;
+
+#define SET_WPCP_CALLBACK(name) \
+  if (options->name.ex_cb) { \
+    ret->name.ex_cb = options->name.ex_cb; \
+    ret->wpcp->name.ex_cb = name##_ex_cb; \
+  }
+  SET_WPCP_CALLBACK(read_data);
+  SET_WPCP_CALLBACK(write_data);
+  SET_WPCP_CALLBACK(handle_alarm);
+  SET_WPCP_CALLBACK(read_history_data);
+  SET_WPCP_CALLBACK(read_history_alarm);
+  SET_WPCP_CALLBACK(browse);
+  SET_WPCP_CALLBACK(subscribe_data);
+  SET_WPCP_CALLBACK(subscribe_alarm);
+  SET_WPCP_CALLBACK(unsubscribe);
+  SET_WPCP_CALLBACK(republish);
+#undef SET_WPCP_CALLBACK
+
+  if (!ret->context) {
+    lwsl_err("creating context failed\n");
+    wpcp_lws_delete(ret);
+    return NULL;
+  }
+
+  if (options->http_port) {
+    ret->http_mount.mountpoint = "/";
+    ret->http_mount.mountpoint_len = 1;
+    ret->http_mount.origin_protocol = LWSMPRO_FILE;
+    ret->http_mount.origin = options->http_rootdir;
+
+    info.port = options->http_port;
+    info.iface = options->http_interface;
+    info.mounts = options->http_rootdir ? &ret->http_mount : NULL;
+
+    lws_create_vhost(ret->context, &info);
+  }
+
+  if (options->https_port) {
+    ret->https_mount.mountpoint = "/";
+    ret->https_mount.mountpoint_len = 1;
+    ret->https_mount.origin_protocol = LWSMPRO_FILE;
+    ret->https_mount.origin = options->https_rootdir;
+
+    info.port = options->https_port;
+    info.iface = options->https_interface;
+    info.mounts = options->https_rootdir ? &ret->https_mount : NULL;
+    info.ssl_ca_filepath = options->https_ca_filepath;
+    info.ssl_cert_filepath = options->https_cert_filepath;
+    info.ssl_cipher_list = options->https_cipher_list;
+    info.ssl_private_key_filepath = options->https_private_key_filepath;
+    info.ssl_private_key_password = options->https_private_key_password;
+
+    lws_create_vhost(ret->context, &info);
+  }
+
+  if (options->rwpcp_address) {
+    int rwpcp_fallback_port = options->rwpcp_secure == WPCP_LWS_OPTIONS_SECURE_OFF ? 80 : 443;
+    info.port = CONTEXT_PORT_NO_LISTEN;
+    info.iface = NULL;
+    info.mounts = NULL;
+    info.http_proxy_address = options->rwpcp_proxy_address;
+    info.http_proxy_port = options->rwpcp_proxy_port;
+    info.ssl_ca_filepath = options->rwpcp_ca_filepath;
+    info.ssl_cert_filepath = options->rwpcp_cert_filepath;
+    info.ssl_cipher_list = options->rwpcp_cipher_list;
+    info.ssl_private_key_filepath = options->rwpcp_private_key_filepath;
+    info.ssl_private_key_password = options->rwpcp_private_key_password;
+
+    ret->client_connect_info.address = options->rwpcp_address;
+    ret->client_connect_info.context = ret->context;
+    ret->client_connect_info.host = options->rwpcp_host ? options->rwpcp_host : options->rwpcp_address;
+    ret->client_connect_info.origin = options->rwpcp_origin;
+    ret->client_connect_info.path = options->rwpcp_path ? options->rwpcp_path : "/";
+    ret->client_connect_info.port = options->rwpcp_port ? options->rwpcp_port : rwpcp_fallback_port;
+    ret->client_connect_info.protocol = protocols[2].name;
+    ret->client_connect_info.ssl_connection = ssl_option(options->rwpcp_secure);
+    ret->client_connect_info.vhost = lws_create_vhost(ret->context, &info);
+  }
+
+  return ret;
+}
+
+int wpcp_lws_service(struct wpcp_lws_t* wpcp_lws, int timeout_ms)
+{
+  if (!wpcp_lws->client && wpcp_lws->client_connect_info.context) {
+    time_t current_time = time(NULL);
+    if (wpcp_lws->next_client_connect < current_time) {
+      lwsl_notice("Connecting client to %s\n", wpcp_lws->client_connect_info.address);
+      wpcp_lws->client = lws_client_connect_via_info(&wpcp_lws->client_connect_info);
+      wpcp_lws->next_client_connect = current_time + wpcp_lws->client_reconnect_interval;
+    }
+  }
+
+  return lws_service(wpcp_lws->context, timeout_ms);
+}
+
+void wpcp_lws_cancel_service(struct wpcp_lws_t* wpcp_lws)
+{
+  lws_cancel_service(wpcp_lws->context);
+}
+
+
+void wpcp_lws_lock(struct wpcp_lws_t* wpcp_lws)
 {
 #ifdef _WIN32
-  EnterCriticalSection(&g_mutex);
+  EnterCriticalSection(&wpcp_lws->mutex);
 #else
-  pthread_mutex_lock(&g_mutex);
+  pthread_mutex_lock(&wpcp_lws->mutex);
 #endif
 }
 
-void wpcp_lws_unlock(void)
+void wpcp_lws_unlock(struct wpcp_lws_t* wpcp_lws)
 {
 #ifdef _WIN32
-  LeaveCriticalSection(&g_mutex);
+  LeaveCriticalSection(&wpcp_lws->mutex);
 #else
-  pthread_mutex_unlock(&g_mutex);
+  pthread_mutex_unlock(&wpcp_lws->mutex);
 #endif
+}
+
+void wpcp_lws_delete(struct wpcp_lws_t* wpcp_lws)
+{
+  if (!wpcp_lws)
+    return;
+  lws_context_destroy(wpcp_lws->context);
+#ifdef _WIN32
+  DeleteCriticalSection(&wpcp_lws->mutex);
+#else
+  pthread_mutex_destroy(&wpcp_lws->mutex);
+#endif
+  wpcp_delete(wpcp_lws->wpcp);
+  wpcp_free(wpcp_lws);
 }
 
 WPCP_END_EXTERN_C

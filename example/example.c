@@ -1,4 +1,4 @@
-#include <wpcp_lws.h>
+#include <wpcp_lws_main.h>
 
 #include <assert.h>
 #include <time.h>
@@ -209,17 +209,17 @@ static void republish(void* user, struct wpcp_publish_handle_t* publish_handle, 
   wpcp_return_republish(publish_handle);
 }
 
-static void init(struct wpcp_lws_t* lws)
+static void init(struct wpcp_lws_main_t* lws)
 {
-  lws->wpcp->browse.cb = browse;
-  lws->wpcp->read_data.cb = read_data;
-  lws->wpcp->write_data.cb = write_data;
-  lws->wpcp->subscribe_data.cb = subscribe_data;
-  lws->wpcp->unsubscribe.cb = unsubscribe;
-  lws->wpcp->republish.cb = republish;
+  lws->options.browse.cb = browse;
+  lws->options.read_data.cb = read_data;
+  lws->options.write_data.cb = write_data;
+  lws->options.subscribe_data.cb = subscribe_data;
+  lws->options.unsubscribe.cb = unsubscribe;
+  lws->options.republish.cb = republish;
 }
 
-static void cleanup(struct wpcp_lws_t* lws)
+static void cleanup(struct wpcp_lws_main_t* lws)
 {
   (void) lws;
 }
