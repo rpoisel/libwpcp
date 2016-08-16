@@ -1,0 +1,13 @@
+environment:
+  matrix:
+    - GENERATOR: Visual Studio 12 2013
+    - GENERATOR: Visual Studio 12 2013 Win64
+platform: x64
+build_script:
+  - md build
+  - cd build
+  - cmake .. -DCMAKE_BUILD_TYPE=Release -DWPCP_BUILD_CHECK=ON -DWPCP_BUILD_LIBWEBSOCKETS=ON -G "%GENERATOR%"
+  - cmake --build . --config Release
+
+test_script:
+  - cmake --build . --config Release --target RUN_TESTS

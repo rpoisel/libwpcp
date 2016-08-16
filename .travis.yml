@@ -1,0 +1,24 @@
+language: c
+matrix:
+  include:
+  - env: BUILD_TYPE=coverage
+    install:
+      - gem install coveralls-lcov
+    after_success:
+      - coveralls-lcov build/coverage_test.info
+  - env: BUILD_TYPE=release
+  - env: BUILD_TYPE=lxc CMAKE_ARGS="-DWPCP_BUILD_CHECK=ON" LXC_DIST=precise LXC_ARCH=i386
+  - env: BUILD_TYPE=lxc CMAKE_ARGS="-DWPCP_BUILD_CHECK=ON" LXC_DIST=precise LXC_ARCH=amd64
+  - env: BUILD_TYPE=lxc CMAKE_ARGS="-DWPCP_BUILD_CHECK=OFF" LXC_DIST=xenial LXC_ARCH=i386
+  - env: BUILD_TYPE=lxc CMAKE_ARGS="-DWPCP_BUILD_CHECK=OFF" LXC_DIST=xenial LXC_ARCH=amd64
+script:
+  - ./travis_build.sh $BUILD_TYPE $CMAKE_ARGS $LXC_DIST $LXC_ARCH
+dist: trusty
+sudo: required
+addons:
+  apt:
+    packages:
+    - check
+    - cmake
+    - lcov
+    - libssl-dev
