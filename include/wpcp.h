@@ -111,54 +111,65 @@ typedef void(WPCP_CDECL *wpcp_unsubscribe_ex_cb_t)(void* user, struct wpcp_resul
 typedef void(WPCP_CDECL *wpcp_republish_cb_t)(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription);
 typedef void(WPCP_CDECL *wpcp_republish_ex_cb_t)(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription, void** context, uint32_t remaining);
 
+union wpcp_has_out_message_callback_t {
+  wpcp_has_out_message_cb_t cb;
+};
+union wpcp_read_data_callback_t {
+  wpcp_read_data_cb_t cb;
+  wpcp_read_data_ex_cb_t ex_cb;
+};
+union wpcp_write_data_callback_t {
+  wpcp_write_data_cb_t cb;
+  wpcp_write_data_ex_cb_t ex_cb;
+};
+union wpcp_handle_alarm_callback_t {
+  wpcp_handle_alarm_cb_t cb;
+  wpcp_handle_alarm_ex_cb_t ex_cb;
+};
+union wpcp_read_history_data_callback_t {
+  wpcp_read_history_data_cb_t cb;
+  wpcp_read_history_data_ex_cb_t ex_cb;
+};
+union wpcp_read_history_alarm_callback_t {
+  wpcp_read_history_alarm_cb_t cb;
+  wpcp_read_history_alarm_ex_cb_t ex_cb;
+};
+union wpcp_browse_callback_t {
+  wpcp_browse_cb_t cb;
+  wpcp_browse_ex_cb_t ex_cb;
+};
+union wpcp_subscribe_data_callback_t {
+  wpcp_subscribe_data_cb_t cb;
+  wpcp_subscribe_data_ex_cb_t ex_cb;
+};
+union wpcp_subscribe_alarm_callback_t {
+  wpcp_subscribe_alarm_cb_t cb;
+  wpcp_subscribe_alarm_ex_cb_t ex_cb;
+};
+union wpcp_unsubscribe_callback_t {
+  wpcp_unsubscribe_cb_t cb;
+  wpcp_unsubscribe_ex_cb_t ex_cb;
+};
+union wpcp_republish_callback_t {
+  wpcp_republish_cb_t cb;
+  wpcp_republish_ex_cb_t ex_cb;
+};
 
 
 struct wpcp_t {
   size_t out_message_pre_padding;
   size_t out_message_post_padding;
-  union {
-    wpcp_has_out_message_cb_t cb;
-  } has_out_message;
-  union {
-    wpcp_read_data_cb_t cb;
-    wpcp_read_data_ex_cb_t ex_cb;
-  } read_data;
-  union {
-    wpcp_write_data_cb_t cb;
-    wpcp_write_data_ex_cb_t ex_cb;
-  } write_data;
-  union {
-    wpcp_handle_alarm_cb_t cb;
-    wpcp_handle_alarm_ex_cb_t ex_cb;
-  } handle_alarm;
-  union {
-    wpcp_read_history_data_cb_t cb;
-    wpcp_read_history_data_ex_cb_t ex_cb;
-  } read_history_data;
-  union {
-    wpcp_read_history_alarm_cb_t cb;
-    wpcp_read_history_alarm_ex_cb_t ex_cb;
-  } read_history_alarm;
-  union {
-    wpcp_browse_cb_t cb;
-    wpcp_browse_ex_cb_t ex_cb;
-  } browse;
-  union {
-    wpcp_subscribe_data_cb_t cb;
-    wpcp_subscribe_data_ex_cb_t ex_cb;
-  } subscribe_data;
-  union {
-    wpcp_subscribe_alarm_cb_t cb;
-    wpcp_subscribe_alarm_ex_cb_t ex_cb;
-  } subscribe_alarm;
-  union {
-    wpcp_unsubscribe_cb_t cb;
-    wpcp_unsubscribe_ex_cb_t ex_cb;
-  } unsubscribe;
-  union {
-    wpcp_republish_cb_t cb;
-    wpcp_republish_ex_cb_t ex_cb;
-  } republish;
+  union wpcp_has_out_message_callback_t has_out_message;
+  union wpcp_read_data_callback_t read_data;
+  union wpcp_write_data_callback_t write_data;
+  union wpcp_handle_alarm_callback_t handle_alarm;
+  union wpcp_read_history_data_callback_t read_history_data;
+  union wpcp_read_history_alarm_callback_t read_history_alarm;
+  union wpcp_browse_callback_t browse;
+  union wpcp_subscribe_data_callback_t subscribe_data;
+  union wpcp_subscribe_alarm_callback_t subscribe_alarm;
+  union wpcp_unsubscribe_callback_t unsubscribe;
+  union wpcp_republish_callback_t republish;
 };
 
 struct wpcp_out_message_t {
