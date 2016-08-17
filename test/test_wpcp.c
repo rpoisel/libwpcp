@@ -355,6 +355,50 @@ START_TEST(read_history_data_1)
 END_TEST
 
 
+static void read_history_alarm_cb_0(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, const struct wpcp_value_t* starttime, const struct wpcp_value_t* endtime, const struct wpcp_value_t* maxresults, const struct wpcp_value_t* filter)
+{
+  (void) user;
+  (void) id;
+  (void) starttime;
+  (void) endtime;
+  (void) maxresults;
+  (void) filter;
+  wpcp_return_read_history_alarm(result, NULL, 0);
+}
+
+static void read_history_alarm_cb_1(void* user, struct wpcp_result_t* result, const struct wpcp_value_t* id, const struct wpcp_value_t* starttime, const struct wpcp_value_t* endtime, const struct wpcp_value_t* maxresults, const struct wpcp_value_t* filter)
+{
+  (void) user;
+  (void) id;
+  (void) starttime;
+  (void) endtime;
+  (void) maxresults;
+  (void) filter;
+  wpcp_return_read_history_alarm(result, NULL, 1);
+  wpcp_return_read_history_alarm_item(result, NULL, 0, false, NULL, NULL, 0.0, 0, NULL, 0, false, NULL, 0);
+}
+
+START_TEST(read_history_alarm_0)
+{
+  g_wpcp->read_history_alarm.cb = read_history_alarm_cb_0;
+  handle_hello();
+
+  const uint8_t data[] = { 0x83, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0 };
+  send_message("readhistoryalarm", data, sizeof(data));
+}
+END_TEST
+
+START_TEST(read_history_alarm_1)
+{
+  g_wpcp->read_history_alarm.cb = read_history_alarm_cb_1;
+  handle_hello();
+
+  const uint8_t data[] = { 0x83, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0 };
+  send_message("readhistoryalarm", data, sizeof(data));
+}
+END_TEST
+
+
 static void subscribe_data_cb_alias(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id)
 {
   static struct wpcp_publish_handle_t* publish_handle;
@@ -502,6 +546,8 @@ TCase* testcase_wpcp(void)
   tcase_add_test(ret, handle_alarm);
   tcase_add_test(ret, read_history_data_0);
   tcase_add_test(ret, read_history_data_1);
+  tcase_add_test(ret, read_history_alarm_0);
+  tcase_add_test(ret, read_history_alarm_1);
   tcase_add_test(ret, subscribe_data_alias);
   tcase_add_test(ret, subscribe_alarm_alias);
   tcase_add_test(ret, subscribe_data_reject);
