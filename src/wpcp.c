@@ -495,18 +495,20 @@ struct wpcp_publish_handle_t* wpcp_return_subscribe_accept(struct wpcp_result_t*
 
 void wpcp_return_subscribe_alias(struct wpcp_result_t* result, const struct wpcp_value_t* diagnostic_info, struct wpcp_subscription_t* subscription, struct wpcp_publish_handle_t* publish_handle)
 {
+  struct wpcp_internal_t* wpcp = result->session->wpcp;
   struct wpcp_subscription_t* other_subscription;
   WPCP_ASSERT(publish_handle->length);
   other_subscription = publish_handle->items->subscription;
   WPCP_ASSERT(other_subscription->type == subscription->type);
   wpcp_return_subscribe_internal(result, diagnostic_info, wpcp_retain_subscription(other_subscription));
-  wpcp_release_subscription(result->session->wpcp, subscription);
+  wpcp_release_subscription(wpcp, subscription);
 }
 
 void wpcp_return_subscribe_reject(struct wpcp_result_t* result, const struct wpcp_value_t* diagnostic_info, struct wpcp_subscription_t* subscription)
 {
+  struct wpcp_internal_t* wpcp = result->session->wpcp;
   wpcp_result_add_unsigned_integer(result, diagnostic_info, 0);
-  wpcp_release_subscription(result->session->wpcp, subscription);
+  wpcp_release_subscription(wpcp, subscription);
 }
 
 void wpcp_return_republish(struct wpcp_publish_handle_t* publish_handle)

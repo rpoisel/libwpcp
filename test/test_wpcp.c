@@ -17,6 +17,19 @@ static void ignore_has_out_message(void* user)
   (void) user;
 }
 
+static void ignore_republish(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription)
+{
+  (void) user;
+  (void) subscription;
+  wpcp_return_republish(publish_handle);
+}
+
+static void ignore_unsubscribe(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription)
+{
+  (void) user;
+  wpcp_return_unsubscribe(result, NULL, subscription);
+}
+
 static void tc_setup(void)
 {
   testcase_setup();
@@ -342,6 +355,93 @@ START_TEST(read_history_data_1)
 END_TEST
 
 
+static void subscribe_data_cb_alias(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id)
+{
+  static struct wpcp_publish_handle_t* publish_handle;
+  (void) user;
+  (void) id;
+
+  if (publish_handle)
+    wpcp_return_subscribe_alias(result, NULL, subscription, publish_handle);
+  else
+    publish_handle = wpcp_return_subscribe_accept(result, NULL, subscription);
+}
+
+static void subscribe_data_cb_reject(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id)
+{
+  (void) user;
+  (void) id;
+  wpcp_return_subscribe_reject(result, NULL, subscription);
+}
+
+START_TEST(subscribe_data_alias)
+{
+  g_wpcp->republish.cb = ignore_republish;
+  g_wpcp->subscribe_data.cb = subscribe_data_cb_alias;
+  g_wpcp->unsubscribe.cb = ignore_unsubscribe;
+  handle_hello();
+
+  const uint8_t data[] = { 0x84, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0, 0xa0 };
+  send_message("subscribedata", data, sizeof(data));
+}
+END_TEST
+
+START_TEST(subscribe_data_reject)
+{
+  g_wpcp->subscribe_data.cb = subscribe_data_cb_reject;
+  handle_hello();
+
+  const uint8_t data[] = { 0x83, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0 };
+  send_message("subscribedata", data, sizeof(data));
+}
+END_TEST
+
+
+static void subscribe_alarm_cb_alias(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id, const struct wpcp_value_t* filter)
+{
+  static struct wpcp_publish_handle_t* publish_handle;
+  (void) user;
+  (void) id;
+  (void) filter;
+
+  if (publish_handle)
+    wpcp_return_subscribe_alias(result, NULL, subscription, publish_handle);
+  else
+    publish_handle = wpcp_return_subscribe_accept(result, NULL, subscription);
+}
+
+static void subscribe_alarm_cb_reject(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, const struct wpcp_value_t* id, const struct wpcp_value_t* filter)
+{
+  (void) user;
+  (void) id;
+  (void) filter;
+  wpcp_return_subscribe_reject(result, NULL, subscription);
+}
+
+START_TEST(subscribe_alarm_alias)
+{
+  g_wpcp->republish.cb = ignore_republish;
+  g_wpcp->subscribe_alarm.cb = subscribe_alarm_cb_alias;
+  g_wpcp->unsubscribe.cb = ignore_unsubscribe;
+
+  handle_hello();
+
+  const uint8_t data[] = { 0x84, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0, 0xa0 };
+  send_message("subscribealarm", data, sizeof(data));
+}
+END_TEST
+
+START_TEST(subscribe_alarm_reject)
+{
+  g_wpcp->subscribe_alarm.cb = subscribe_alarm_cb_reject;
+  handle_hello();
+
+  const uint8_t data[] = { 0x83, 0x18, INVALID_MESSAGE_ID, 0x00, 0xa0 };
+  send_message("subscribealarm", data, sizeof(data));
+}
+END_TEST
+
+
 void unsubscribe_cb(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription)
 {
   (void) user;
@@ -402,6 +502,10 @@ TCase* testcase_wpcp(void)
   tcase_add_test(ret, handle_alarm);
   tcase_add_test(ret, read_history_data_0);
   tcase_add_test(ret, read_history_data_1);
+  tcase_add_test(ret, subscribe_data_alias);
+  tcase_add_test(ret, subscribe_alarm_alias);
+  tcase_add_test(ret, subscribe_data_reject);
+  tcase_add_test(ret, subscribe_alarm_reject);
   tcase_add_test(ret, unsubscribe_malloc_fail);
   tcase_add_test(ret, unsubscribe_unknown);
   tcase_add_test(ret, unsubscribe_invalid);
