@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 
 project(libwpcp C)
+set(libwpcp_VERSION_MAJOR 0)
+set(libwpcp_VERSION_MINOR 9)
+set(libwpcp_VERSION_PATCH 0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -69,8 +72,8 @@ if (WPCP_BUILD_LIBWEBSOCKETS)
   list(APPEND LIBWEBSOCKETS_LIBRARIES ${OPENSSL_LIBRARIES})
 else ()
   find_package(LibWebSockets)
-  if (NOT LIBWEBSOCKETS_FOUND)
-    message(FATAL_ERROR "Call cmake with '-DWPCP_BUILD_LIBWEBSOCKETS=ON' to build LibWebSockets as ExternalProject.")
+  if (NOT LIBWEBSOCKETS_FOUND AND (NOT LIBWEBSOCKETS_INCLUDE_DIRS OR NOT LIBWEBSOCKETS_LIBRARIES))
+      message(FATAL_ERROR "libwebsockets could not be found.")
   endif ()
 endif ()
 
@@ -93,11 +96,12 @@ if (WPCP_BUILD_CHECK)
 
   set(CHECK_INCLUDE_DIRS ${INSTALL_DIR}/include ${SOURCE_DIR})
   set(CHECK_LIBRARIES check compat)
+  set(CHECK_FOUND TRUE)
 else ()
   find_package(Check)
   find_package(Subunit)
   if (NOT CHECK_FOUND)
-    message(FATAL_ERROR "Call cmake with '-DWPCP_BUILD_CHECK=ON' to build Check as ExternalProject.")
+    message(WARNING "Call cmake with '-DWPCP_BUILD_CHECK=ON' to build Check as ExternalProject. Not performing tests.")
   endif ()
   if (SUBUNIT_FOUND)
     list(APPEND CHECK_LIBRARIES ${SUBUNIT_LIBRARIES})
@@ -173,7 +177,12 @@ add_library(wpcp SHARED ${WPCP_PUBLIC_HEADERS} ${WPCP_PRIVATE_HEADERS} ${WPCP_SO
 set_property(TARGET wpcp PROPERTY COMPILE_DEFINITIONS WPCP_EXPORTS)
 set_property(TARGET wpcp PROPERTY PUBLIC_HEADER ${WPCP_PUBLIC_HEADERS})
 target_link_libraries(wpcp ${WPCP_LIBRARIES})
-install(TARGETS wpcp DESTINATION lib)
+install(TARGETS wpcp
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    PUBLIC_HEADER DESTINATION include
+)
 
 add_library(wpcp-lws SHARED ${WPCP_LWS_PUBLIC_HEADERS} ${WPCP_LWS_SOURCES})
 set_property(TARGET wpcp-lws PROPERTY COMPILE_DEFINITIONS WPCP_LWS_EXPORTS)
@@ -182,17 +191,24 @@ target_link_libraries(wpcp-lws wpcp ${LIBWEBSOCKETS_LIBRARIES})
 if (NOT WIN32)
   target_link_libraries(wpcp-lws pthread)
 endif ()
-install(TARGETS wpcp-lws DESTINATION lib)
+install(TARGETS wpcp-lws
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    PUBLIC_HEADER DESTINATION include
+)
 
 add_executable(example ${EXAMPLE_SOURCES})
 target_link_libraries(example wpcp-lws)
 
-add_executable(test_wpcp ${WPCP_TEST_FILES} ${WPCP_PUBLIC_HEADERS} ${WPCP_PRIVATE_HEADERS} ${WPCP_SOURCES})
-set_property(TARGET test_wpcp PROPERTY COMPILE_DEFINITIONS WPCP_STATIC WPCP_LWS_STATIC WPCP_USE_CUSTOM_ALLOCATOR)
-target_link_libraries(test_wpcp ${CHECK_LIBRARIES} ${WPCP_LIBRARIES})
+if (CHECK_FOUND)
+    add_executable(test_wpcp ${WPCP_TEST_FILES} ${WPCP_PUBLIC_HEADERS} ${WPCP_PRIVATE_HEADERS} ${WPCP_SOURCES})
+    set_property(TARGET test_wpcp PROPERTY COMPILE_DEFINITIONS WPCP_STATIC WPCP_LWS_STATIC WPCP_USE_CUSTOM_ALLOCATOR)
+    target_link_libraries(test_wpcp ${CHECK_LIBRARIES} ${WPCP_LIBRARIES})
 
-enable_testing()
-add_test(NAME wpcp COMMAND test_wpcp)
+    enable_testing()
+    add_test(NAME wpcp COMMAND test_wpcp)
+endif()
 
 
 find_program(GENHTML_EXECUTABLE NAMES genhtml)
@@ -222,3 +238,14 @@ if (CPPCHECK_EXECUTABLE AND CPPCHECKHTMLREPORT_EXECUTABLE)
 else ()
   message(STATUS "Can't run cppchek: cppcheck and/or cppcheck-htmlreport was not found")
 endif ()
+
+### packaging settings
+if (NOT CPACK_GENERATOR)
+    if (CMAKE_SYSTEM_NAME MATCHES "Windows")
+        set(CPACK_GENERATOR "ZIP")
+    else()
+        set(CPACK_GENERATOR "TGZ")
+    endif()
+endif()
+set(CPACK_PACKAGE_FILE_NAME libwpcp-${libwpcp_VERSION_MAJOR}.${libwpcp_VERSION_MINOR}.${libwpcp_VERSION_PATCH})
+include(CPack)
