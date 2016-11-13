@@ -188,13 +188,13 @@ int wpcp_lws_main(int argc, char* argv[], wpcp_lws_init_cleanup_function_t init,
 
   if (g_wpcp_lws) {
     if (g_wpcp_lws_main.start)
-      g_wpcp_lws_main.start();
+      g_wpcp_lws_main.start(g_wpcp_lws);
 
     while (!force_exit)
       wpcp_lws_service(g_wpcp_lws, 500);
 
     if (g_wpcp_lws_main.stop)
-      g_wpcp_lws_main.stop();
+      g_wpcp_lws_main.stop(g_wpcp_lws);
 
     wpcp_lws_delete(g_wpcp_lws);
   }
