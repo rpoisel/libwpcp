@@ -110,6 +110,7 @@ typedef void(WPCP_CDECL *wpcp_unsubscribe_cb_t)(void* user, struct wpcp_result_t
 typedef void(WPCP_CDECL *wpcp_unsubscribe_ex_cb_t)(void* user, struct wpcp_result_t* result, struct wpcp_subscription_t* subscription, void** context, uint32_t remaining);
 typedef void(WPCP_CDECL *wpcp_republish_cb_t)(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription);
 typedef void(WPCP_CDECL *wpcp_republish_ex_cb_t)(void* user, struct wpcp_publish_handle_t* publish_handle, struct wpcp_subscription_t* subscription, void** context, uint32_t remaining);
+typedef void(WPCP_CDECL *wpcp_iterate_subscriptions_cb_t)(void* user, struct wpcp_subscription_t* subscription, struct wpcp_publish_handle_t* publish_handle);
 
 union wpcp_has_out_message_callback_t {
   wpcp_has_out_message_cb_t cb;
@@ -201,6 +202,10 @@ WPCP_EXPORT void* wpcp_subscription_get_user(struct wpcp_subscription_t* subscri
 WPCP_EXPORT void wpcp_subscription_set_user(struct wpcp_subscription_t* subscription, void* user);
 
 WPCP_EXPORT size_t wpcp_subscription_get_usage_count(struct wpcp_subscription_t* subscription);
+
+WPCP_EXPORT size_t wpcp_get_subscription_count(struct wpcp_t* wpcp);
+
+WPCP_EXPORT void wpcp_iterate_subscriptions(struct wpcp_t* wpcp, void* user, wpcp_iterate_subscriptions_cb_t callback);
 
 WPCP_EXPORT void wpcp_return_read_data(struct wpcp_result_t* result, const struct wpcp_value_t* diagnostic_info, const struct wpcp_value_t* value, double timestamp, uint32_t status, const struct wpcp_key_value_pair_t* additional, uint32_t additional_count);
 

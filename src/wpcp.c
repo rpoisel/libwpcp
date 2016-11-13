@@ -206,6 +206,23 @@ static bool wpcp_session_handle_unsubscribe_message(struct wpcp_session_t* sessi
   return ret;
 }
 
+size_t wpcp_get_subscription_count(struct wpcp_t* wpcp)
+{
+  struct wpcp_internal_t* wpcp_internal = (struct wpcp_internal_t*) wpcp;
+  return wpcp_internal->subscription_count;
+}
+
+void wpcp_iterate_subscriptions(struct wpcp_t* wpcp, void* user, wpcp_iterate_subscriptions_cb_t callback)
+{
+  size_t i;
+  struct wpcp_internal_t* wpcp_internal = (struct wpcp_internal_t*) wpcp;
+
+  for (i = 0; i < wpcp_internal->subscription_count; ++i) {
+    struct wpcp_subscription_t* subscription = wpcp_internal->subscriptions[i];
+    callback(user, subscription, &subscription->publish_handle);
+  }
+}
+
 void wpcp_return_unsubscribe(struct wpcp_result_t* result, const struct wpcp_value_t* diagnostic_info, struct wpcp_subscription_t* subscription)
 {
   if (subscription)

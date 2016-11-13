@@ -201,6 +201,63 @@ START_TEST(subscription_type)
 }
 END_TEST
 
+START_TEST(get_subscription_count)
+{
+  ck_assert_int_eq(wpcp_get_subscription_count(&g_wpcp_internal.wpcp), 0);
+
+  struct wpcp_subscription_t* subsa = wpcp_request_subscription(&g_wpcp_internal, 0, NULL, 0);
+  ck_assert_int_eq(wpcp_get_subscription_count(&g_wpcp_internal.wpcp), 1);
+
+  struct wpcp_subscription_t* subsb = wpcp_request_subscription(&g_wpcp_internal, 1, NULL, 0);
+  ck_assert_int_eq(wpcp_get_subscription_count(&g_wpcp_internal.wpcp), 2);
+
+  wpcp_release_subscription(&g_wpcp_internal, subsb);
+  ck_assert_int_eq(wpcp_get_subscription_count(&g_wpcp_internal.wpcp), 1);
+
+  wpcp_release_subscription(&g_wpcp_internal, subsa);
+  ck_assert_int_eq(wpcp_get_subscription_count(&g_wpcp_internal.wpcp), 0);
+}
+END_TEST
+
+struct test_session_iterate_subscriptions_t {
+  size_t counter;
+  struct wpcp_subscription_t* subscriptions[2];
+};
+
+void test_session_iterate_subscriptions_callback(void* user, struct wpcp_subscription_t* subscription, struct wpcp_publish_handle_t* publish_handle)
+{
+  struct test_session_iterate_subscriptions_t* helper = (struct test_session_iterate_subscriptions_t*) user;
+  ck_assert_ptr_eq(subscription, helper->subscriptions[helper->counter]);
+  ck_assert_ptr_eq(publish_handle, &helper->subscriptions[helper->counter++]->publish_handle);
+}
+
+START_TEST(iterate_subscriptions)
+{
+  struct test_session_iterate_subscriptions_t helper;
+  memset(&helper, 0, sizeof(helper));
+
+  wpcp_iterate_subscriptions(&g_wpcp_internal.wpcp, &helper, test_session_iterate_subscriptions_callback);
+  ck_assert_int_eq(helper.counter, 0);
+
+  helper.counter = 0;
+  helper.subscriptions[0] = wpcp_request_subscription(&g_wpcp_internal, 0, NULL, 0);
+  wpcp_iterate_subscriptions(&g_wpcp_internal.wpcp, &helper, test_session_iterate_subscriptions_callback);
+  ck_assert_int_eq(helper.counter, 1);
+
+  helper.counter = 0;
+  helper.subscriptions[1] = wpcp_request_subscription(&g_wpcp_internal, 1, NULL, 0);
+  wpcp_iterate_subscriptions(&g_wpcp_internal.wpcp, &helper, test_session_iterate_subscriptions_callback);
+  ck_assert_int_eq(helper.counter, 2);
+
+  wpcp_release_subscription(&g_wpcp_internal, helper.subscriptions[0]);
+  wpcp_release_subscription(&g_wpcp_internal, helper.subscriptions[1]);
+
+  helper.counter = 0;
+  wpcp_iterate_subscriptions(&g_wpcp_internal.wpcp, &helper, test_session_iterate_subscriptions_callback);
+  ck_assert_int_eq(helper.counter, 0);
+}
+END_TEST
+
 START_TEST(subscription_publish_item)
 {
   uint32_t id1 = wpcp_session_get_next_free_publish_id(g_session);
@@ -874,6 +931,8 @@ TCase* testcase_session(void)
   tcase_add_test (ret, subscription_max_publish_item);
   tcase_add_test (ret, subscription_release_publish_item_via_session);
   tcase_add_test (ret, subscription_publish_item_malloc_fail);
+  tcase_add_test (ret, get_subscription_count);
+  tcase_add_test (ret, iterate_subscriptions);
   tcase_add_test (ret, session_out_message);
   tcase_add_test (ret, session_out_message_malloc_fail);
   tcase_add_test (ret, subscription_publish_item_publish);
