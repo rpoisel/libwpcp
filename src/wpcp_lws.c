@@ -400,6 +400,11 @@ struct wpcp_lws_t* wpcp_lws_create(const struct wpcp_lws_options_t* options)
   return ret;
 }
 
+struct wpcp_t* wpcp_lws_get_wpcp(struct wpcp_lws_t* wpcp_lws)
+{
+  return wpcp_lws->wpcp;
+}
+
 int wpcp_lws_service(struct wpcp_lws_t* wpcp_lws, int timeout_ms)
 {
   if (!wpcp_lws->client && wpcp_lws->client_connect_info.context) {

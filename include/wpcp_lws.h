@@ -70,6 +70,8 @@ WPCP_LWS_EXPORT void wpcp_lws_set_log_level(int level, void (*log_emit_function)
 
 WPCP_LWS_EXPORT struct wpcp_lws_t* wpcp_lws_create(const struct wpcp_lws_options_t* options);
 
+WPCP_LWS_EXPORT struct wpcp_t* wpcp_lws_get_wpcp(struct wpcp_lws_t* wpcp_lws);
+
 WPCP_LWS_EXPORT int wpcp_lws_service(struct wpcp_lws_t* wpcp_lws, int timeout_ms);
 
 WPCP_LWS_EXPORT void wpcp_lws_cancel_service(struct wpcp_lws_t* wpcp_lws);
