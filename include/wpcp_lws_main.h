@@ -13,6 +13,8 @@ struct wpcp_lws_main_t {
   const char* (*handle_argument)(const char* name, const char* value);
   void (*start)(struct wpcp_lws_t* wpcp_lws);
   void (*stop)(struct wpcp_lws_t* wpcp_lws);
+  int service_timeout_ms;
+  void (*service)(struct wpcp_lws_t* wpcp_lws);
 };
 
 typedef void (*wpcp_lws_init_cleanup_function_t)(struct wpcp_lws_main_t* lws);

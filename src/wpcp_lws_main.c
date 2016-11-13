@@ -178,6 +178,7 @@ int wpcp_lws_main(int argc, char* argv[], wpcp_lws_init_cleanup_function_t init,
 
   g_wpcp_lws_main.argc = argc;
   g_wpcp_lws_main.argv = argv;
+  g_wpcp_lws_main.service_timeout_ms = 500;
 
   if (init)
     init(&g_wpcp_lws_main);
@@ -190,8 +191,12 @@ int wpcp_lws_main(int argc, char* argv[], wpcp_lws_init_cleanup_function_t init,
     if (g_wpcp_lws_main.start)
       g_wpcp_lws_main.start(g_wpcp_lws);
 
-    while (!force_exit)
-      wpcp_lws_service(g_wpcp_lws, 500);
+    while (!force_exit) {
+      wpcp_lws_service(g_wpcp_lws, g_wpcp_lws_main.service_timeout_ms);
+
+      if (g_wpcp_lws_main.service)
+        g_wpcp_lws_main.service(g_wpcp_lws);
+    }
 
     if (g_wpcp_lws_main.stop)
       g_wpcp_lws_main.stop(g_wpcp_lws);
