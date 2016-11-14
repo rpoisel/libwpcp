@@ -131,7 +131,7 @@ if (WPCP_GENERATE_COVERAGE)
 endif ()
 
 
-include_directories(${CHECK_INCLUDE_DIRS} ${LIBWEBSOCKETS_INCLUDE_DIRS} include src)
+include_directories(${LIBWEBSOCKETS_INCLUDE_DIRS} include src)
 
 set(WPCP_PUBLIC_HEADERS
   include/wpcp.h
@@ -215,6 +215,7 @@ add_executable(example ${EXAMPLE_SOURCES})
 target_link_libraries(example wpcp-lws)
 
 if (CHECK_FOUND)
+  include_directories(${CHECK_INCLUDE_DIRS})
   add_executable(test_wpcp ${WPCP_TEST_FILES} ${WPCP_PUBLIC_HEADERS} ${WPCP_PRIVATE_HEADERS} ${WPCP_SOURCES})
   set_property(TARGET test_wpcp PROPERTY COMPILE_DEFINITIONS WPCP_STATIC WPCP_LWS_STATIC WPCP_USE_CUSTOM_ALLOCATOR)
   target_link_libraries(test_wpcp ${CHECK_LIBRARIES} ${WPCP_LIBRARIES})
