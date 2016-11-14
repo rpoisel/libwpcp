@@ -332,7 +332,7 @@ struct wpcp_value_t* wpcp_cbor_read_buffer_read_wpcp_value(struct wpcp_cbor_read
     if (!wpcp_cbor_read_buffer_read_uint64(buffer, &value))
       return NULL;
 #if SIZE_MAX < UINT64_MAX
-    if (type == WPCP_VALUE_TYPE_BYTE_STRING || type == WPCP_VALUE_TYPE_TEXT_STRING || type == WPCP_VALUE_TYPE_ARRAY || type == WPCP_VALUE_TYPE_MAP) {
+    if (type == WPCP_CBOR_MAJOR_TYPE_BYTE_STRING || type == WPCP_CBOR_MAJOR_TYPE_TEXT_STRING || type == WPCP_CBOR_MAJOR_TYPE_ARRAY || type == WPCP_CBOR_MAJOR_TYPE_MAP) {
       if (value > SIZE_MAX)
         return NULL;
     }
