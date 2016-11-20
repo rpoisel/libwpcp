@@ -321,6 +321,7 @@ struct wpcp_out_message_t* wpcp_session_out_message_create(struct wpcp_session_t
     item = next_item;
   }
 
+  session->publish_item.next = &session->publish_item;
   session->publish_queue.first = item;
   if (!item) {
     session->publish_queue.last = NULL;
